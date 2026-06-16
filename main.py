@@ -394,3 +394,34 @@ data["casualty_count"] = data["casualty_count"].clip(lower=0, upper=10)
 
 # Stores as a yes/no in the form of 1 or 0 respectively
 data["has_casualty"] = (data["casualty_count"] > 0).astype(int)
+
+# Sort by crash_date, then re-order index (as it will be jumbled) and drop=True throws away old index
+data = data.sort_values("crash_date").reset_index(drop=True)
+
+feature_columns = [
+    "borough",
+    "hour_group",
+    "weekday",
+    "factor_group",
+    "vehicle_1_group",
+    "vehicle_2_group",
+    "hour",
+    "month",
+    "is_weekend",
+    "is_night",
+]
+
+text_columns = [
+    "borough",
+    "hour_group",
+    "weekday",
+    "factor_group",
+    "vehicle_1_group",
+    "vehicle_2_group",
+]
+
+# Directing which data goes into model_input
+model_input = data[feature_columns]
+
+# get_dummies turns text categories into numeric 0/1 columns (also called "one-hot encoding")
+model_input = pd.get_dummies(model_input, columns=text_columns)
