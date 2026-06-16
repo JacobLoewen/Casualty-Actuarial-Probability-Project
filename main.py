@@ -322,6 +322,75 @@ def get_vehicle_group(vehicle):
         return "SUV"
     if "SEDAN" in vehicle_text:
         return "Passenger car"
-    if vehicle_text == "" or vehicle_text == "NAN":
+    if vehicle_text == "UNKNOWN" or vehicle_text == "" or vehicle_text == "NAN":
         return "Unknown"
     return "Other"
+
+# Creates the output folder where my CSV, Excel, and chart files will be saved
+#   exist_ok=True makes it so that if the folder already exists, it doesn't crash
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+# Let the user know the casualty data is loading
+print("Loading casualty data...")
+
+try:
+    # Attempts to read the actual data
+    data = pd.read_csv(DATA_URL)
+    data_source = "NYC Open Data motor vehicle collisions"
+except Exception as error:
+    # Reads demo data instead
+    print("Could not download data, so demo data will be used.")
+    print("Reason:", error)
+    data = make_demo_data(ROW_LIMIT)
+    data_source = "demo data"
+
+print("Cleaning data...")
+
+# Converts bad dates into missing values to prevent program from crashing
+data["crash_date"] = pd.to_datetime(data["crash_date"], errors="coerce")
+
+# apply is a pandas function that runs a function for every row
+# dt stands for date/time. It is a pandas function. Allows you to get month, day, etc.
+#   from date data.
+data["hour"] = data["crash_time"].apply(get_hour)
+
+# dropna removes rows that are n/a (has missing values, in this case,
+#   the crash_date is specifically missing)
+data = data.dropna(subset=["crash_date"])
+data = data[data["hour"] >= 0]
+
+data["month"] = data["crash_date"].dt.month
+data["weekday"] = data["crash_date"].dt.day_name()
+data["is_weekend"] = data["weekday"].isin(["Saturday", "Sunday"]).astype(int)
+data["is_night"] = ((data["hour"] >= 22) | (data["hour"] <= 4)).astype(int)
+data["hour_group"] = data["hour"].apply(get_hour_group)
+
+# Cleaning borough, crash factor, vehicle type, and casualty counts:
+if "zip_code" not in data.columns:
+    data["zip_code"] = np.nan
+if "latitude" not in data.columns:
+    data["latitude"] = np.nan
+if "longitude" not in data.columns:
+    data["longitude"] = np.nan
+
+# axis=1 means go row by row, as opposed to axis=0 (column by column)
+data["borough"] = data.apply(get_clean_borough, axis=1)
+
+# fillna replaces missing values
+data["factor_group"] = data["contributing_factor_vehicle_1"].fillna("Unspecified").apply(get_factor_group)
+data["vehicle_1_group"] = data["vehicle_type_code1"].fillna("Unknown").apply(get_vehicle_group)
+data["vehicle_2_group"] = data["vehicle_type_code2"].fillna("Unknown").apply(get_vehicle_group)
+
+
+# Converts data to numeric value. If the data is missing, changes it to 0.
+injured = pd.to_numeric(data["number_of_persons_injured"], errors="coerce").fillna(0)
+killed = pd.to_numeric(data["number_of_persons_killed"], errors="coerce").fillna(0)
+
+data["casualty_count"] = injured + killed
+
+# Makes model much more stable to say 10, especially in the case of buses
+#   where there is a much higher chance of over 10 casualties.
+data["casualty_count"] = data["casualty_count"].clip(lower=0, upper=10)
+
+# Stores as a yes/no in the form of 1 or 0 respectively
+data["has_casualty"] = (data["casualty_count"] > 0).astype(int)
