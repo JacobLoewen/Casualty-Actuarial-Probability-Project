@@ -182,3 +182,146 @@ def make_demo_data(number_of_rows):
         }
     )
 
+# Method that helps clean missing or messy borough data
+#   Helps the project figure out the borough when the original dataset has missing borough values
+
+def get_borough_from_zip(zip_value):
+    zip_text = str(zip_value).strip()
+
+    # "NAN" means pandas/NumPy may ahve marked it as missing data, so we just return ""
+    if zip_text == "" or zip_text.upper() == "NAN":
+        return ""
+    
+    # Takes the part of the zip_text that is before . and - in case of 10001.0 or 10001-1234
+    zip_text = zip_text.split(".")[0].split("-")[0]
+
+    try:
+        zip_code = int(zip_text)
+    except ValueError:
+        return ""
+    
+    if 10000 <= zip_code <= 10292:
+        return "MANHATTAN"
+    if 10300 <= zip_code <= 10314:
+        return "STATEN ISLAND"
+    if 10400 <= zip_code <= 10475:
+        return "BRONX"
+    if 11200 <= zip_code <= 11256:
+        return "BROOKLYN"
+    if zip_code in [11004, 11005] or 11100 <= zip_code <= 11109 or 11300 <= zip_code <= 11697:
+        return "QUEENS"
+
+    return ""
+    
+# Able to also get the borough from coordinates if needed:
+def get_borough_from_coordinates(latitude_value, longitude_value):
+    try:
+        latitude = float(latitude_value)
+        longitude = float(longitude_value)
+    except ValueError:
+        # Could not get borough from coordinates
+        return ""
+    
+    # Checks if coords are outside the broad New York City area
+    if not (40.45 <= latitude <= 40.95 and -74.30 <= longitude <= -73.65):
+        return ""
+    
+    # Comparing below, so start closest_distance at max
+    closest_borough = ""
+    closest_distance = float("inf")
+
+    # Finds closest borough to where the coordinates are from
+    for borough, center in BOROUGH_CENTERS.items():
+        center_latitude, center_longitude = center
+        distance = (latitude - center_latitude) ** 2 + (longitude - center_longitude) ** 2
+
+        if distance < closest_distance:
+            closest_borough = borough
+            closest_distance = distance
+        
+    return closest_borough
+
+# The final borough-cleaning function that uses the functions above.
+    # Use borough if it exists. If not, then ZIP code. If not that, then coords.
+    # If all else fails, label "UNKNOWN"
+
+def get_clean_borough(row):
+    borough_text = str(row.get("borough", "")).strip().upper()
+
+    # If it already has a usable borough, return it.
+    if borough_text not in ["", "NAN", "UNKNOWN"]:
+        return borough_text
+    
+    zip_borough = get_borough_from_zip(row.get("zip_code", ""))
+    if zip_borough != "":
+        return zip_borough
+    
+    coordinate_borough = get_borough_from_coordinates(
+        row.get("latitude", ""),
+        row.get("longitude", ""),
+    )
+    if coordinate_borough != "":
+        return coordinate_borough
+    
+    return "UNKNOWN"
+
+# Time and category cleanup functions
+def get_hour(time_value):
+    time_text = str(time_value)
+    pieces = time_text.split(":")
+
+    try:
+        return int(pieces[0])
+    except ValueError:
+        return -1
+    
+def get_hour_group(hour):
+    if hour < 0:
+        return "Unknown"
+    if hour >= 5 and hour <= 9:
+        return "Morning"
+    if hour >= 10 and hour <= 14:
+        return "Midday"
+    if hour >= 15 and hour <= 22:
+        return "Evening"
+    return "Late night"
+
+def get_factor_group(factor):
+    factor_text = str(factor).upper()
+
+    if "UNSAFE SPEED" in factor_text:
+        return "Unsafe speed"
+    if "ALCOHOL" in factor_text:
+        return "Alcohol or drugs"
+    if "FAILURE TO YIELD" in factor_text:
+        return "Failure to yield"
+    if "FOLLOWING TOO CLOSELY" in factor_text:
+        return "Following too closely"
+    if "TRAFFIC CONTROL" in factor_text:
+        return "Traffic control"
+    if "INATTENTION" in factor_text or "DISTRACTION" in factor_text:
+        return "Driver distraction"
+    if factor_text == "UNSPECIFIED" or factor_text == "NAN":
+        return "Unspecified"
+    return "Other"
+
+def get_vehicle_group(vehicle):
+    vehicle_text = str(vehicle).upper()
+
+    if "BIKE" in vehicle_text or "BICYCLE" in vehicle_text:
+        return "Bicycle"
+    if "MOTORCYCLE" in vehicle_text:
+        return "Motorcycle"
+    if "BUS" in vehicle_text:
+        return "Bus"
+    if "TAXI" in vehicle_text:
+        return "Taxi"
+    if "TRUCK" in vehicle_text:
+        return "Truck"
+    if "SUV" in vehicle_text or "SPORT UTILITY" in vehicle_text:
+        return "SUV"
+    if "SEDAN" in vehicle_text:
+        return "Passenger car"
+    if vehicle_text == "" or vehicle_text == "NAN":
+        return "Unknown"
+    return "Other"
