@@ -425,3 +425,40 @@ model_input = data[feature_columns]
 
 # get_dummies turns text categories into numeric 0/1 columns (also called "one-hot encoding")
 model_input = pd.get_dummies(model_input, columns=text_columns)
+
+# Finds the row number where the split should happen (in this case, it's after the first 3 quarters
+#   of the total number of rows)
+split_spot = int(len(data) * 0.75)
+
+# iloc is a tool for selecting rows or columns by integer position
+#   iloc stands for integer location
+
+# train_input is for everything before split_spot
+train_input = model_input.iloc[:split_spot]
+
+# test_input is for everything after split_spot
+test_input = model_input.iloc[split_spot]
+
+# Use .copy() for these ones because we will later modify test_data
+#   by adding new columns. 
+#   It makes it its own independent table.
+#   Always use copy when planning to modify the sliced data
+train_data = data.iloc[:split_spot].copy()
+test_data = data.iloc[split_spot].copy()
+
+print("Training probability model...")
+
+# Give logistic regression up to 1000 attempts/steps to find the best coefficients
+probability_model = LogisticRegression(max_iter=1000)
+
+# .fit() trains the model.
+#   Learns the relationship between the input features and whether a casualty happened.
+probability_model.fit(train_input, train_data["has_casualty"])
+
+print("Training casualty count model...")
+
+# Creates and trains the model that predicts the expected number of casualties per crash.
+#   alpha=0.05 controls regularization, a penalty that discourages the model from making its
+#   coefficients too extreme (may weigh it WAY too much when it happens only a couple times)
+count_model = PoissonRegressor(alpha=0.05, max_iter=500)
+count_model.fit(train_input, train_data["casualty_count"])
