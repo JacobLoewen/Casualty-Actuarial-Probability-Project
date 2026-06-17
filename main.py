@@ -461,4 +461,21 @@ print("Training casualty count model...")
 #   alpha=0.05 controls regularization, a penalty that discourages the model from making its
 #   coefficients too extreme (may weigh it WAY too much when it happens only a couple times)
 count_model = PoissonRegressor(alpha=0.05, max_iter=500)
+
+# Finds the casualty count we should expect.
 count_model.fit(train_input, train_data["casualty_count"])
+
+# Creates new column called 'predicted_casualty_probability'
+#   predict_proba predicts the probability of each possible class, only usable once a
+#   scikit-learn classification model is trained.
+#   [:, 1] keeps only the casualty class (the latter of the result, in the format:
+#   [first_num, second_num]. An example of this is: [0.75, 0.25], where 0.25 is 
+#   probability of a casualty)
+test_data["predicted_casualty_probability"] = probability_model.predict_proba(test_input)[:, 1]
+
+# Predicts expected casualty count by using .predict(), and makes sure none of the predicted
+#   values are below 0.0001. This is needed for when we use mean_poisson_deviance
+test_data["predicted_casualty_count"] = count_model.predict(test_input)
+test_data["predicted_casualty_count"] = test_data["predicted_casualty_count"].clip(lower=0.0001)
+
+test = "test"
