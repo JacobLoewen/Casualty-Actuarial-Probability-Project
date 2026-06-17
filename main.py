@@ -478,4 +478,99 @@ test_data["predicted_casualty_probability"] = probability_model.predict_proba(te
 test_data["predicted_casualty_count"] = count_model.predict(test_input)
 test_data["predicted_casualty_count"] = test_data["predicted_casualty_count"].clip(lower=0.0001)
 
-test = "test"
+# Baseline predictions and evaluation scores
+average_train_probability = train_data["has_casualty"].mean()
+average_train_count = train_data["casualty_count"].mean()
+
+# Note: A Random Forest is a machine learning model that makes predictions by combining
+#   the results of many decision trees.
+
+# nunique counts number of unique values (if it contains both 0 and 1, then
+#   we can calculate the AUC. If there is only one value, then AUC can't be calculated).
+#   Used for ranking casualty risk
+#   Note: Higher is BETTER
+if test_data["has_casualty"].nunique() > 1:
+    auc_score = roc_auc_score(
+        test_data["has_casualty"],
+        test_data["predicted_casualty_probability"],
+    )
+else:
+    auc_score = 0
+
+# Used for Probability Error (seeing how good a probability prediction is)
+# Lower is BETTER
+brier_model = brier_score_loss(
+    test_data["has_casualty"],
+    test_data["predicted_casualty_probability"]
+)
+
+# Used for Baseline Probability Error
+#   Takes the average of the Brier Scores among policies (ex. each customer)
+#   Lower is BETTER (since we are taking the average of all the model scores)
+brier_baseline = brier_score_loss(
+    test_data["has_casualty"],
+    np.full(len(test_data), average_train_probability),
+)
+
+# Count Model Error
+#   Measures how well the Poisson model's predicted casualty counts match the
+#       real casualty counts.
+#   Lower is BETTER
+poisson_model_score = mean_poisson_deviance(
+    test_data["casualty_count"],
+    test_data["predicted_casualty_count"],
+)
+
+# Baseline Count Error
+#   Gives something for Poisson Model Score to compare against
+#   Baseline Score's purpose is to see how good your Poisson Model is: if the baseline
+#       is higher than the model, the model is good! If model is higher, it is bad.
+#   Lower is BETTER (since we are taking the average of all the model scores)
+poisson_baseline_score = mean_poisson_deviance(
+    test_data["casualty_count"],
+    np.full(len(test_data), max(average_train_count, 0.0001)),
+)
+
+# Average Casualty Count Miss
+#   Cakcykates the average absolute error
+#   Lower is BETTER 
+count_error = mean_absolute_error(
+    test_data["casualty_count"],
+    test_data["predicted_casualty_count"],
+)
+
+# Calculating top-risk lift:
+
+risk_cutoff = test_data["predicted_casualty_count"].quantile(0.90)
+
+highest_risk_crashes = test_data[
+    test_data["predicted_casualty_count"] >= risk_cutoff
+]
+
+# Compares casualty rate in the highest-risk group to the overall test casualty rate
+top_lift = highest_risk_crashes["has_casualty"].mean() / test_data["has_casualty"].mean()
+
+# Average predicted casualties per crash * number of portfolio crashes
+expected_casualties = test_data["predicted_casualty_count"].mean() * PORTFOLIO_CRASH_COUNT
+
+random_numbers = np.random.default_rng(RANDOM_SEED)
+
+# Simulates the total portfolio casualties many times (SIMULATIONS many times)
+simulated_casualties = random_numbers.poisson(expected_casualties, size=SIMULATIONS)
+
+# Estimations for severe portfolio outcomes
+#   var = Value at Risk
+
+# 5% of portfolio outcomes had this number of casualties or more
+casualty_var_95 = np.quantile(simulated_casualties, 0.95)
+
+# 1% of portfolio outcomes had this number of casualties or more
+casualty_var_99 = np.quantile(simulated_casualties, 0.99)
+
+# tvar = Tail Value at Risk
+# Takes the average casualty total of casualty_var_95
+# 'Among the worst 5% of outcomes, the average total was this number of casualties.
+# Tells you about the severity of the tail
+casualty_tvar_95 = simulated_casualties[simulated_casualties >= casualty_var_95].mean()
+
+
