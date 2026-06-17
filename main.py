@@ -642,3 +642,95 @@ metrics = pd.DataFrame(
     ],
     columns=["metric", "value"],
 )
+
+# Saving CSV and Excel outputs
+metrics.to_csv(OUTPUT_FOLDER + "/metrics.csv", index=False)
+segment_results.to_csv(OUTPUT_FOLDER + "/risk_segments.csv", index=False)
+decile_results.to_csv(OUTPUT_FOLDER + "/risk_deciles.csv", index=False)
+test_data.head(500).to_csv(OUTPUT_FOLDER + "/prediction_sample.csv", index=False)
+
+# ExcelWriter writes data to excel files, especially used for when one wants multiple
+#   worksheets (tabs) in the same .xlsx file
+#   Takes CSV and Excel outputs and inserts them into Excel Writer (must do above
+#       to convert to CSV and Excel first!)
+with pd.ExcelWriter(EXCEL_OUTPUT_FILE) as writer:
+    metrics.to_excel(writer, sheet_name="Metrics", index=False)
+    segment_results.to_excel(writer, sheet_name="Risk Segments", index=False)
+    decile_results.to_excel(writer, sheet_name="Risk Deciles", index=False)
+    test_data.head(500).to_excel(writer, sheet_name="Prediction Sample", index=False)
+
+# Creating and Saving the charts
+
+# Creates a new blank figure (graph) and sets its size to width=8, height=5
+plt.figure(figsize(8, 5))
+plt.bar(
+    decile_results["risk_decile"].astype(str),
+    decile_results["actual_casualty_probability"],
+)
+plt.title("Actual Casualty Probability by Predicted Risk Decile")
+plt.xlabel("Risk decile, low to high")
+plt.ylabel("Actual casualty probability")
+plt.tight_layout()
+
+# dpi means Dots Per Inch: Controls the resolution of the saved image
+#   In this case, save the image with 150 pixels per inch
+plt.savefig(OUTPUT_FOLDER + "/risk_deciles.png", dpi=150)
+plt.close()
+
+plt.figure(figsize=(8, 5))
+plt.hist(simulated_casualties, bins=35)
+plt.axvline(casualty_var_95, color="red", label="95% VaR")
+plt.axvline(casualty_var_99, color="black", label="99% VaR")
+plt.title("Simulated Aggregate Casualties")
+plt.xlabel("Casualties in portfolio period")
+plt.ylabel("Simulation count")
+
+# Allows viewer to know which line is which
+plt.legend()
+
+# Automatically adjusts spacing on the figure
+#   Without this, labels may get cut off
+plt.tight_layout()
+plt.savefig(OUTPUT_FOLDER + "/portfolio_simulation.png", dpi=150)
+plt.close()
+
+# Showcase the Final Project Summary:
+print()
+print("CASUALTY ACTUARIAL PROBABILITY PROJECT")
+print("=" * 39)
+print("Data source:", data_source)
+
+# f-strings allow inserting values into text
+# :, is a format specifier for displaying number with commas as thousands separators
+print("Rows used:", f"{len(data):,}")
+print("Training rows:", f"{len(train_data):,}")
+print("Testing rows:", f"{len(test_data):,}")
+
+print()
+print("Probability model: chance of at least one injury or fatality")
+print("AUC:", round(auc_score, 3))
+print("Model Brier score:", round(brier_model, 3))
+print("Baseline Brier score:", round(brier_baseline, 3))
+
+print()
+print("Count model: expected casualties per crash")
+print("Model Poisson deviance:", round(poisson_model_score, 3))
+print("Baseline Poisson deviance:", round(poisson_baseline_score, 3))
+print("Mean absolute error:", round(count_error, 3))
+print("Top 10 percent lift:", round(top_lift, 3))
+
+print()
+print("Portfolio simulation")
+print("Portfolio crashes:", f"{PORTFOLIO_CRASH_COUNT:,}")
+print("Expected casualties:", round(expected_casualties, 1))
+print("95 percent casualty VaR:", round(casualty_var_95, 0))
+print("99 percent casualty VaR:", round(casualty_var_99, 0))
+print("95 percent casualty TVaR:", round(casualty_tvar_95, 1))
+
+print()
+print("Highest risk segments:")
+print(segment_results.head(8).to_string(index=False))
+
+print()
+print("Files saved in:", OUTPUT_FOLDER)
+print("Excel workbook:", EXCEL_OUTPUT_FILE)
