@@ -573,4 +573,72 @@ casualty_var_99 = np.quantile(simulated_casualties, 0.99)
 # Tells you about the severity of the tail
 casualty_tvar_95 = simulated_casualties[simulated_casualties >= casualty_var_95].mean()
 
+# Segment and risk decline tables
 
+segment_data = test_data[test_data["borough"] != "UNKNOWN"].copy()
+
+if len(segment_data) == 0:
+    segment_data = test_data.copy()
+
+# .agg means aggregate (applies one or more summary functions to data)
+#   Produces nicely named columns
+segment_results = (
+    segment_data.groupby(["borough", "hour_group", "factor_group"]).agg(
+        crashes=("casualty_count", "size"),
+        actual_casualty_probability=("has_casualty", "mean"),
+        actual_average_casualties=("casualty_count", "mean"),
+        predicted_average_casualties=("predicted_casualty_count", "mean")
+    ).reset_index()
+)
+
+# Keep only segments with at least 30 crashes so the segment summary is more reliable
+segment_results = segment_results[segment_results["crashes"] >= 30]
+segment_results = segment_results.sort_values(
+    "predicted_average_casualties",
+    ascending=False,
+)
+
+# risk_decline splits test crashes into 10 groups based on predicted risk
+#   1 = lowest predicted risk
+#   10 = highest predicted risk
+test_data["risk_decline"] = pd.qcut(
+    test_data["predicted_casualty_count"].rank(method="first"),
+    10,
+    labels=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+)
+
+# decile means dividing your data into 10 equal-sized groups
+#    Used to see if my model successfully ranks the riskiest policies higher than the safest ones
+decile_results = (
+    test_data.groupby("risk_decline").agg(
+        crashes=("casualty_count", "size"),
+        actual_casualty_probability=("has_casualty", "mean"),
+        predicted_average_casualties=("predicted_casualty_count", "mean"),
+    ).reset_index()
+)
+
+# Metrics Summary Table (useful for printing out to CSV and Excel)
+#   DataFrame turns data into a main table-like data structure
+
+metrics = pd.DataFrame(
+    [
+        ["data_source", data_source],
+        ["records_used", len(data)],
+        ["training_records", len(train_data)],
+        ["testing_records", len(test_data)],
+        ["actual_test_casualty_probability", test_data["has_casualty"].mean()],
+        ["actual_test_average_casualties", test_data["casualty_count"].mean()],
+        ["logistic_auc", auc_score],
+        ["model_brier_score", brier_model],
+        ["baseline_brier_score", brier_baseline],
+        ["model_poisson_deviance", poisson_model_score],
+        ["baseline_poisson_deviance", poisson_baseline_score],
+        ["casualty_count_mae", count_error],
+        ["top_10_percent_lift", top_lift],
+        ["portfolio_expected_casualties", expected_casualties],
+        ["portfolio_95_percent_var", casualty_var_95],
+        ["portfolio_99_percent_var", casualty_var_99],
+        ["portfolio_95_percent_tvar", casualty_tvar_95],
+    ],
+    columns=["metric", "value"],
+)
