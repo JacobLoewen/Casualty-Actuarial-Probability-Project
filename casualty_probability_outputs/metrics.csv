@@ -1,0 +1,18 @@
+metric,value
+data_source,NYC Open Data motor vehicle collisions
+records_used,20000
+training_records,15000
+testing_records,5000
+actual_test_casualty_probability,0.4678
+actual_test_average_casualties,0.639
+logistic_auc,0.6310833297585072
+model_brier_score,0.2354563351451573
+baseline_brier_score,0.24970663111111108
+model_poisson_deviance,1.1073890106341386
+baseline_poisson_deviance,1.1417360035584738
+casualty_count_mae,0.6608423880354225
+top_10_percent_lift,1.3039760581445061
+portfolio_expected_casualties,3189.160752534446
+portfolio_95_percent_var,3285.0
+portfolio_99_percent_var,3323.0
+portfolio_95_percent_tvar,3307.437984496124

@@ -69,6 +69,8 @@ RANDOM_SEED = 2026
 
 # Where we get our excel file and etc.
 OUTPUT_FOLDER = "casualty_probability_outputs"
+EXCEL_OUTPUT_FILE = OUTPUT_FOLDER + "/casualty_actuarial_probability_project.xlsx"
+
 
 # The data we are working with
 DATA_URL = (
@@ -437,14 +439,14 @@ split_spot = int(len(data) * 0.75)
 train_input = model_input.iloc[:split_spot]
 
 # test_input is for everything after split_spot
-test_input = model_input.iloc[split_spot]
+test_input = model_input.iloc[split_spot:]
 
 # Use .copy() for these ones because we will later modify test_data
 #   by adding new columns. 
 #   It makes it its own independent table.
 #   Always use copy when planning to modify the sliced data
 train_data = data.iloc[:split_spot].copy()
-test_data = data.iloc[split_spot].copy()
+test_data = data.iloc[split_spot:].copy()
 
 print("Training probability model...")
 
@@ -476,7 +478,7 @@ test_data["predicted_casualty_probability"] = probability_model.predict_proba(te
 # Predicts expected casualty count by using .predict(), and makes sure none of the predicted
 #   values are below 0.0001. This is needed for when we use mean_poisson_deviance
 test_data["predicted_casualty_count"] = count_model.predict(test_input)
-test_data["predicted_casualty_count"] = test_data["predicted_casualty_count"].clip(lower=0.0001)
+test_data["predicted_casualty_count"] = np.clip(test_data["predicted_casualty_count"], 0.0001, None)
 
 # Baseline predictions and evaluation scores
 average_train_probability = train_data["has_casualty"].mean()
@@ -489,6 +491,7 @@ average_train_count = train_data["casualty_count"].mean()
 #   we can calculate the AUC. If there is only one value, then AUC can't be calculated).
 #   Used for ranking casualty risk
 #   Note: Higher is BETTER
+
 if test_data["has_casualty"].nunique() > 1:
     auc_score = roc_auc_score(
         test_data["has_casualty"],
@@ -573,7 +576,7 @@ casualty_var_99 = np.quantile(simulated_casualties, 0.99)
 # Tells you about the severity of the tail
 casualty_tvar_95 = simulated_casualties[simulated_casualties >= casualty_var_95].mean()
 
-# Segment and risk decline tables
+# Segment and risk decile tables
 
 segment_data = test_data[test_data["borough"] != "UNKNOWN"].copy()
 
@@ -601,7 +604,7 @@ segment_results = segment_results.sort_values(
 # risk_decline splits test crashes into 10 groups based on predicted risk
 #   1 = lowest predicted risk
 #   10 = highest predicted risk
-test_data["risk_decline"] = pd.qcut(
+test_data["risk_decile"] = pd.qcut(
     test_data["predicted_casualty_count"].rank(method="first"),
     10,
     labels=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -610,7 +613,7 @@ test_data["risk_decline"] = pd.qcut(
 # decile means dividing your data into 10 equal-sized groups
 #    Used to see if my model successfully ranks the riskiest policies higher than the safest ones
 decile_results = (
-    test_data.groupby("risk_decline").agg(
+    test_data.groupby("risk_decile").agg(
         crashes=("casualty_count", "size"),
         actual_casualty_probability=("has_casualty", "mean"),
         predicted_average_casualties=("predicted_casualty_count", "mean"),
@@ -662,7 +665,7 @@ with pd.ExcelWriter(EXCEL_OUTPUT_FILE) as writer:
 # Creating and Saving the charts
 
 # Creates a new blank figure (graph) and sets its size to width=8, height=5
-plt.figure(figsize(8, 5))
+plt.figure(figsize=(8, 5))
 plt.bar(
     decile_results["risk_decile"].astype(str),
     decile_results["actual_casualty_probability"],
